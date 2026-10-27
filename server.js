@@ -8,22 +8,22 @@ app.use(express.json({ limit: '10mb' })); // Erhöht das Limit, da Bild-Scans of
 // Das lädt deine normalen Web-App-Dateien (index.html etc.), die im Hauptverzeichnis liegen
 app.use(express.static(__dirname));
 
-// PROXY FÜR GOOGLE API: Deine App fragt ab jetzt diesen Link
+// PROXY FÜR GEMINI API: Deine App leitet die Scans sicher hierüber um
 app.all('/api/proxy', async (req, res) => {
     try {
-        // Die offizielle Google-URL, bei der der Key sicher als Parameter angehängt wird
-        const targetUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.API_KEY}`;
+        // Die offizielle Gemini-URL, bei der dein sicherer Key aus Render angehängt wird
+        const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.API_KEY}`;
         
         const response = await fetch(targetUrl, {
-            method: req.method,
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body)
+            body: JSON.stringify(req.body)
         });
 
         const data = await response.json();
-        res.json(data);
+        res.status(response.status).json(data);
     } catch (error) {
         res.status(500).json({ error: 'Proxy Fehler', details: error.message });
     }
