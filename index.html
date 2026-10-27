@@ -15,7 +15,6 @@ main{max-width:520px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) 16
 header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
 header img{width:44px;height:44px;border-radius:10px}
 h1{font-size:1.4rem;margin:0}
-header button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:8px 12px;font-size:.9rem}
 .scan{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--acc);color:var(--acc-ink);border:0;border-radius:16px;padding:18px;font-size:1.15rem;font-weight:700;cursor:pointer}
 input[type=file]{display:none}
 #preview{display:none;width:100%;max-height:260px;object-fit:contain;border-radius:14px;margin-top:16px;background:#0d1730}
@@ -28,10 +27,6 @@ dt{color:var(--muted)}dd{margin:0;font-weight:600;word-break:break-word}
 .links a{display:block;text-align:center;text-decoration:none;border-radius:12px;padding:14px;font-weight:700}
 .cm{background:var(--acc);color:var(--acc-ink)}
 .gg{border:1px solid var(--line);color:var(--ink)}
-#settings{display:none;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px}
-#settings input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0d1730;color:var(--ink);font-size:1rem;margin:8px 0}
-#settings button{background:var(--acc);color:var(--acc-ink);border:0;border-radius:10px;padding:10px 16px;font-weight:700}
-#settings p{margin:0;color:var(--muted);font-size:.9rem}
 :focus-visible{outline:3px solid #fff;outline-offset:2px}
 </style>
 </head>
@@ -40,14 +35,7 @@ dt{color:var(--muted)}dd{margin:0;font-weight:600;word-break:break-word}
 <header>
   <img src="icon-192.png" alt="">
   <h1>Cardz Scan</h1>
-  <button id="cfgBtn" type="button">API-Key</button>
 </header>
-
-<section id="settings">
-  <p>Dein Google-Gemini-API-Key wird nur auf diesem Gerät gespeichert.</p>
-  <input id="key" type="password" placeholder="API-Key einfügen" autocomplete="off">
-  <button id="saveKey" type="button">Speichern</button>
-</section>
 
 <button class="scan" id="scanBtn" type="button">📷 Produkt scannen</button>
 <input id="file" type="file" accept="image/*" capture="environment">
@@ -68,29 +56,10 @@ dt{color:var(--muted)}dd{margin:0;font-weight:600;word-break:break-word}
 </main>
 
 <script>
-// Falls das Modell mal abgeschaltet wird: hier den Namen ändern.
-var MODEL = "gemini-flash-latest";
-
 var $ = function(id){ return document.getElementById(id); };
-var KEY_NAME = "cardzscan_key";
-
-function getKey(){ try { return localStorage.getItem(KEY_NAME) || ""; } catch(e){ return ""; } }
-function setKey(v){ try { localStorage.setItem(KEY_NAME, v); } catch(e){} }
 function status(t, err){ var s=$("status"); s.textContent=t; s.className = err ? "err" : ""; }
 
-$("cfgBtn").onclick = function(){
-  var s=$("settings"); s.style.display = s.style.display==="block" ? "none" : "block";
-  $("key").value = getKey();
-};
-$("saveKey").onclick = function(){
-  setKey($("key").value.trim());
-  $("settings").style.display="none";
-  status("Key gespeichert. Jetzt scannen.");
-};
-if(!getKey()){ $("settings").style.display="block"; status("Bitte zuerst deinen API-Key eintragen.", true); }
-
 $("scanBtn").onclick = function(){
-  if(!getKey()){ $("settings").style.display="block"; status("Bitte zuerst deinen API-Key eintragen.", true); return; }
   $("file").click();
 };
 
@@ -130,26 +99,18 @@ $("file").onchange = async function(e){
     var dataUrl = await shrink(f);
     var p = $("preview"); p.src = dataUrl; p.style.display="block";
     var b64 = dataUrl.split(",")[1];
-    var models = [MODEL, "gemini-2.5-flash", "gemini-flash-lite-latest"];
-    var res, json, done = false;
-    for (var i = 0; i < models.length && !done; i++) {
-      for (var t = 0; t < 2 && !done; t++) {
-        if (i + t > 0) status("Server ausgelastet, neuer Versuch …");
-        res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + models[i] + ":generateContent", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json", "x-goog-api-key": getKey() },
-          body: JSON.stringify({
-            contents:[{ parts:[ {text:PROMPT}, {inline_data:{mime_type:"image/jpeg", data:b64}} ] }],
-            generationConfig:{ responseMimeType:"application/json", temperature:0.1 }
-          })
-        });
-        json = await res.json();
-        if (res.ok) { done = true; }
-        else if ([429,500,503,504].indexOf(res.status) === -1 && res.status !== 404) { break; }
-        else { await new Promise(function(r){ setTimeout(r, 1500); }); }
-      }
-      if (!done && res && [429,500,503,504,404].indexOf(res.status) === -1) break;
-    }
+
+    // ANFRAGE GEHT JETZT SICHER ÜBER DEINEN RENDER-PROXY:
+    var res = await fetch("/api/proxy", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        contents:[{ parts:[ {text:PROMPT}, {inline_data:{mime_type:"image/jpeg", data:b64}} ] }],
+        generationConfig:{ responseMimeType:"application/json", temperature:0.1 }
+      })
+    });
+
+    var json = await res.json();
     if(!res.ok){
       var m = (json.error && json.error.message) || ("Fehler " + res.status);
       throw new Error(m);
